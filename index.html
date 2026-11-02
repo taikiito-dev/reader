@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>貼って読む / Paste to read</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1b1a18; --dim:#9a948c; --rule:rgba(0,0,0,.09);
+    --size:19px; --lh:1.72;
+    --jp: "Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+    --la: -apple-system,"Segoe UI",system-ui,sans-serif;
+    --ui: "Hiragino Sans","Yu Gothic",-apple-system,"Segoe UI",system-ui,sans-serif;
+  }
+  /* 配色は Apple Books の Themes から実測（2026-11-02、画面写真の画素を採取） */
+  html[data-theme="white"]{--bg:#ffffff;--fg:#1c1c1e;--dim:#9a948c;--rule:rgba(0,0,0,.09)}
+  html[data-theme="paper"]{--bg:#eeeced;--fg:#282425;--dim:#8b8688;--rule:rgba(0,0,0,.11)}
+  html[data-theme="calm"] {--bg:#f0e2c8;--fg:#40332b;--dim:#9b8a72;--rule:rgba(0,0,0,.12)}
+  html[data-theme="quiet"]{--bg:#4a494e;--fg:#c9c8cd;--dim:#908f95;--rule:rgba(255,255,255,.14)}
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--ui);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+    transition:background .35s ease, color .35s ease;
+  }
+
+  /* ---------- 入口 ---------- */
+  #gate{height:100%;display:flex;align-items:center;justify-content:center;padding:32px;overflow:auto}
+  #gate .box{width:100%;max-width:720px}
+  #gate .head{display:flex;align-items:baseline;gap:14px}
+  #gate h1{font-weight:600;font-size:24px;margin:0 0 6px;letter-spacing:.01em}
+  #gate .sp{flex:1}
+  #gate p.lede{margin:0 0 14px;color:var(--dim);font-size:13.5px;line-height:1.75}
+
+  #safe{
+    display:flex;gap:11px;align-items:flex-start;
+    border:1px solid var(--rule);border-radius:9px;
+    padding:13px 15px;margin:0 0 18px;
+    color:var(--fg);font-size:12.5px;line-height:1.75;
+  }
+  #safe svg{flex:0 0 auto;margin-top:2px;opacity:.5}
+  #safe b{font-weight:600}
+  #safe span{opacity:.78}
+
+  #src{
+    width:100%;height:36vh;min-height:180px;padding:20px 22px;
+    border:1px solid var(--rule);border-radius:10px;background:transparent;color:var(--fg);
+    font-family:var(--ui);font-size:14px;line-height:1.85;resize:none;outline:none;
+  }
+  #src:focus{border-color:var(--fg)}
+  #gate .row{display:flex;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap}
+  #gate .hint{color:var(--dim);font-size:12px}
+
+  button{
+    font:inherit;font-size:13px;color:var(--fg);background:transparent;
+    border:1px solid var(--rule);border-radius:7px;padding:8px 16px;cursor:pointer;
+    transition:border-color .18s ease, opacity .18s ease, color .18s ease;
+  }
+  button:hover{border-color:var(--fg)}
+  button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  button.primary:hover{opacity:.85}
+  button.link{border:0;padding:6px 8px;color:var(--dim);font-size:12px}
+  button.link:hover{color:var(--fg)}
+
+  /* ---------- 読む面 ---------- */
+  #reader{position:fixed;inset:0;display:none;flex-direction:column}
+  #reader.on{display:flex}
+
+  #bar{
+    height:52px;flex:0 0 auto;display:flex;align-items:center;
+    padding:0 18px;color:var(--dim);font-size:12px;
+    opacity:0;transition:opacity .3s ease;
+  }
+  #reader:hover #bar, #bar.show, #bar:focus-within{opacity:1}
+  #bar .sp{flex:1}
+
+  /* 群ごとに「ラベル＋操作」で縦に積み、群と群の間は仕切り線で離す */
+  .set{display:flex;align-items:center;gap:7px;padding:0 15px;position:relative}
+  .set + .set::before{
+    content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:1px;height:18px;background:var(--rule);
+  }
+  .set > .lab{
+    color:var(--dim);font-size:10px;letter-spacing:.09em;
+    text-transform:uppercase;white-space:nowrap;opacity:.85;
+  }
+  .seg{display:flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
+  .seg button{
+    border:0;border-radius:0;padding:6px 12px;color:var(--dim);font-size:12px;
+    min-width:38px;
+  }
+  .seg button + button{border-left:1px solid var(--rule)}
+  .seg button:hover{color:var(--fg);background:var(--rule)}
+  .seg button[aria-pressed="true"]{color:var(--fg);background:var(--rule)}
+
+  select{
+    font:inherit;font-size:12px;color:var(--fg);background:transparent;
+    border:1px solid var(--rule);border-radius:7px;padding:6px 8px;cursor:pointer;outline:none;
+    max-width:170px;
+  }
+  select:hover{border-color:var(--fg)}
+  select option{color:#111;background:#fff}
+
+  #swatch{display:flex;align-items:center;gap:8px}
+  #swatch i{
+    width:18px;height:18px;border-radius:50%;cursor:pointer;display:block;
+    border:1px solid rgba(128,128,128,.4);
+    transition:box-shadow .18s ease, transform .18s ease;
+  }
+  #swatch i:hover{transform:scale(1.14)}
+  #swatch i[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg), 0 0 0 3.4px var(--fg)}
+
+  #stage{flex:1 1 auto;position:relative;min-height:0}
+  #flow{
+    position:absolute;inset:0;overflow:hidden;
+    font-family:var(--la),var(--jp),sans-serif;
+    font-size:var(--size); line-height:var(--lh);
+    text-align:justify; line-break:strict; overflow-wrap:break-word;
+    font-feature-settings:"palt" 1;
+  }
+  #flow p{margin:0 0 .9em;text-indent:1em}
+  #flow p.first{text-indent:0}
+  #flow.latin{text-align:left;hyphens:auto}
+  #flow.latin p{text-indent:0;margin:0 0 1.15em}
+  #flow h3{
+    font-size:1.03em;font-weight:600;margin:1.5em 0 .65em;text-indent:0;
+    letter-spacing:.03em;break-after:avoid;
+  }
+  #flow h3:first-child{margin-top:0}
+  #flow hr{border:0;border-top:1px solid var(--rule);margin:1.4em 0}
+  #flow a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule);word-break:break-all}
+
+  #foot{
+    height:40px;flex:0 0 auto;display:flex;align-items:center;gap:14px;
+    padding:0 20px 4px;color:var(--dim);font-size:11.5px;letter-spacing:.04em;
+  }
+  #track{flex:1;height:1px;background:var(--rule);position:relative}
+  #fill{position:absolute;left:0;top:0;height:1px;background:var(--fg);transition:width .26s ease}
+  #count,#pct{font-variant-numeric:tabular-nums}
+
+  .tap{position:absolute;top:0;bottom:0;width:20%;cursor:pointer;z-index:2}
+  .tap.prev{left:0} .tap.next{right:0}
+</style>
+</head>
+<body>
+
+<section id="gate">
+  <div class="box">
+    <div class="head">
+      <h1 data-t="title">貼って読む</h1>
+      <span class="sp"></span>
+      <button class="link" id="lang">English</button>
+    </div>
+    <p class="lede" data-t="lede">長い文章を貼ると、画面の幅でページに組み直します。</p>
+
+    <div id="safe">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <path d="M12 3l7 3v5.5c0 4.3-2.9 8.2-7 9.5-4.1-1.3-7-5.2-7-9.5V6l7-3z"/>
+      </svg>
+      <div><b data-t="safeHead">貼った文章はどこにも送りません。</b>
+      <span data-t="safeBody">組み直しはこのブラウザの中だけで行います。サーバーに送信せず、保存もしません。タブを閉じると消えます。</span></div>
+    </div>
+
+    <textarea id="src" data-tph="ph" placeholder="ここに本文を貼る"></textarea>
+    <div class="row">
+      <button class="primary" id="go" data-t="read">読む</button>
+      <button id="unwrapToggle" aria-pressed="true"><span data-t="unwrap">改行をたたむ</span>: ON</button>
+      <span class="hint" data-t="hint">← → かスペースでめくる</span>
+    </div>
+  </div>
+</section>
+
+<section id="reader">
+  <div id="bar">
+    <button id="back" class="link" data-t="back">貼り直す</button>
+    <span class="sp"></span>
+
+    <span class="set">
+      <span class="lab" data-t="labJp">和文</span>
+      <select id="jpSel"></select>
+    </span>
+
+    <span class="set">
+      <span class="lab" data-t="labLa">欧文</span>
+      <select id="laSel"></select>
+    </span>
+
+    <span class="set">
+      <span class="lab" data-t="labLh">行間</span>
+      <span class="seg" id="lhSeg">
+        <button data-lh="0" data-t="lhS">詰</button>
+        <button data-lh="1" aria-pressed="true" data-t="lhM">中</button>
+        <button data-lh="2" data-t="lhL">広</button>
+      </span>
+    </span>
+
+    <span class="set">
+      <span class="lab" data-t="labSize">字</span>
+      <span class="seg">
+        <button id="smaller">&minus;</button>
+        <button id="bigger">&plus;</button>
+      </span>
+    </span>
+
+    <span class="set">
+      <span class="lab" data-t="labPage">組</span>
+      <span class="seg" id="spreadSeg">
+        <button data-sp="1" aria-pressed="true" data-t="two">見開き</button>
+        <button data-sp="0" data-t="one">1ページ</button>
+      </span>
+    </span>
+
+    <span class="set">
+      <span class="lab" data-t="labColor">色</span>
+      <span id="swatch"></span>
+    </span>
+  </div>
+
+  <div id="stage">
+    <div id="flow"></div>
+    <div class="tap prev" id="tapPrev"></div>
+    <div class="tap next" id="tapNext"></div>
+  </div>
+
+  <div id="foot">
+    <span id="count">1 / 1</span>
+    <span id="track"><span id="fill"></span></span>
+    <span id="pct">0%</span>
+  </div>
+</section>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var flow = $('flow'), stage = $('stage');
+  var SEP = ' ';
+  var LH = [1.56, 1.72, 1.90];
+
+  /* ---------- 文言 ---------- */
+  var T = {
+    ja:{ title:'貼って読む', lede:'長い文章を貼ると、画面の幅でページに組み直します。',
+      safeHead:'貼った文章はどこにも送りません。',
+      safeBody:'組み直しはこのブラウザの中だけで行います。サーバーに送信せず、保存もしません。タブを閉じると消えます。',
+      ph:'ここに本文を貼る', read:'読む', unwrap:'改行をたたむ',
+      hint:'← → かスペースでめくる', back:'貼り直す',
+      labJp:'日本語', labLa:'英語', labLh:'行間', labSize:'字', labPage:'組', labColor:'色',
+      lhS:'詰', lhM:'中', lhL:'広', two:'見開き', one:'1ページ', other:'English' },
+    en:{ title:'Paste to read', lede:'Paste a long text and it is re-set into pages that fit your screen.',
+      safeHead:'Your text never leaves this page.',
+      safeBody:'It is laid out inside your own browser. Nothing is sent to a server and nothing is stored. It is gone when you close the tab.',
+      ph:'Paste your text here', read:'Read', unwrap:'Unwrap line breaks',
+      hint:'Arrow keys or space to turn the page', back:'New text',
+      labJp:'Japanese', labLa:'Latin', labLh:'Leading', labSize:'Size', labPage:'Layout', labColor:'Color',
+      lhS:'Tight', lhM:'Normal', lhL:'Loose', two:'Two-up', one:'Single', other:'日本語' }
+  };
+  var lang = 'ja';
+  function applyLang(){
+    var d = T[lang];
+    document.documentElement.lang = lang;
+    [].forEach.call(document.querySelectorAll('[data-t]'), function(el){
+      var k = el.dataset.t; if(d[k] != null) el.textContent = d[k];
+    });
+    $('src').placeholder = d.ph;
+    $('lang').textContent = d.other;
+    $('unwrapToggle').lastChild.textContent = ': ' + (state.unwrap ? 'ON' : 'OFF');
+    if(typeof fillSelects === 'function') fillSelects();
+  }
+
+  /* ---------- 書体（すべて SIL Open Font License 1.1 / google-fonts の ofl 配下） ---------- */
+  // 和文: 日本語の字を持つ書体だけを並べる
+  var JP = [
+    { id:'noto-sans', label:'Noto Sans JP（ゴシック）', en:'Noto Sans JP (sans)',
+      q:'Noto+Sans+JP:wght@400;600', stack:'"Noto Sans JP"', serif:false },
+    { id:'zen-kaku',  label:'Zen Kaku Gothic New（ゴシック）', en:'Zen Kaku Gothic New (sans)',
+      q:'Zen+Kaku+Gothic+New:wght@400;700', stack:'"Zen Kaku Gothic New"', serif:false },
+    { id:'noto-serif',label:'Noto Serif JP（明朝）', en:'Noto Serif JP (mincho)',
+      q:'Noto+Serif+JP:wght@400;600', stack:'"Noto Serif JP"', serif:true },
+    { id:'zen-old',   label:'Zen Old Mincho（明朝）', en:'Zen Old Mincho (mincho)',
+      q:'Zen+Old+Mincho:wght@400;600', stack:'"Zen Old Mincho"', serif:true },
+    { id:'jp-local',  label:'端末のフォント（ネット不要）', en:'System font (works offline)',
+      stack:'"Hiragino Sans","Yu Gothic"', serif:false }
+  ];
+  // 🔴 欧文: 日本語の字を持たない書体だけにする。ここに system-ui / sans-serif を混ぜると
+  //    日本語がその場で拾われてしまい、下の和文指定まで降りてこない（2026-11-02 の不具合の真因）。
+  var LA = [
+    { id:'inter',    label:'Inter（サンセリフ）', en:'Inter (sans)',
+      q:'Inter:wght@400;600', stack:'"Inter"' },
+    { id:'literata', label:'Literata（読み物向け）', en:'Literata (for reading)',
+      q:'Literata:opsz,wght@7..72,400;7..72,600', stack:'"Literata"' },
+    { id:'source',   label:'Source Serif 4', en:'Source Serif 4',
+      q:'Source+Serif+4:opsz,wght@8..60,400;8..60,600', stack:'"Source Serif 4"' },
+    { id:'garamond', label:'EB Garamond', en:'EB Garamond',
+      q:'EB+Garamond:wght@400;600', stack:'"EB Garamond"' },
+    { id:'la-local', label:'端末のフォント（ネット不要）', en:'System font (works offline)',
+      stack:'"Helvetica Neue",Helvetica,Arial' }
+  ];
+
+  var state = { unwrap:true, spread:true, size:19, lh:1,
+                jp:'noto-sans', la:'inter', theme:'white',
+                page:0, pages:1, step:1, max:0, latin:false };
+
+  var loaded = {};
+  function load(f){
+    if(!f.q || loaded[f.id]) return;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=' + f.q + '&display=swap';
+    document.head.appendChild(l);
+    loaded[f.id] = true;
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(function(){
+        if($('reader').classList.contains('on')) layout(true);
+      });
+    }
+  }
+  function pick(list, id){
+    for(var i=0;i<list.length;i++) if(list[i].id === id) return list[i];
+    return list[0];
+  }
+  function applyFonts(){
+    var j = pick(JP, state.jp), l = pick(LA, state.la);
+    load(j); load(l);
+    // 欧文 → 和文 → 総称 の順に積む。欧文側には日本語の字が無いので、
+    // 英字だけが欧文書体で出て、かなと漢字は和文書体まで降りてくる。
+    flow.style.fontFamily =
+      l.stack + ',' + j.stack + ',"Hiragino Sans","Yu Gothic",' + (j.serif ? 'serif' : 'sans-serif');
+  }
+
+  function fillSelects(){
+    [[JP,'jpSel','jp'],[LA,'laSel','la']].forEach(function(t){
+      var list = t[0], sel = $(t[1]), key = t[2];
+      sel.innerHTML = '';
+      list.forEach(function(f){
+        var o = document.createElement('option');
+        o.value = f.id;
+        o.textContent = lang === 'ja' ? f.label : f.en;
+        if(f.id === state[key]) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.onchange = function(){ state[key] = this.value; applyFonts(); layout(true); };
+    });
+  }
+
+  /* ---------- 地の色（Apple Books と同じ4色） ---------- */
+  [{id:'white',chip:'#ffffff',ja:'白',en:'White'},
+   {id:'paper',chip:'#eeeced',ja:'紙',en:'Paper'},
+   {id:'calm', chip:'#f0e2c8',ja:'生成り',en:'Calm'},
+   {id:'quiet',chip:'#4a494e',ja:'墨',en:'Quiet'}].forEach(function(t){
+    var i = document.createElement('i');
+    i.style.background = t.chip; i.title = t.ja; i.dataset.ja = t.ja; i.dataset.en = t.en;
+    i.setAttribute('aria-pressed', String(t.id === state.theme));
+    i.onclick = function(){
+      state.theme = t.id;
+      document.documentElement.dataset.theme = t.id;
+      [].forEach.call($('swatch').children, function(c){
+        c.setAttribute('aria-pressed', String(c === i));
+      });
+    };
+    $('swatch').appendChild(i);
+  });
+
+  /* ---------- 本文の組み直し ---------- */
+  function build(raw){
+    var jp = (raw.match(/[぀-ヿ一-鿿]/g) || []).length;
+    state.latin = jp / Math.max(1, raw.replace(/\s/g,'').length) < 0.08;
+    flow.classList.toggle('latin', state.latin);
+
+    var blocks = raw.replace(/\r\n?/g,'\n').split(/\n[ \t　]*\n+/);
+    var out = [], first = true;
+
+    blocks.forEach(function(block){
+      var lines = block.split('\n')
+        .map(function(l){ return l.replace(/[ \t　]+$/,''); })
+        .filter(function(l){ return l.trim() !== ''; });
+      if(!lines.length) return;
+
+      if(lines.length === 1 && isRule(lines[0])){ out.push('<hr>'); return; }
+      if(lines.length === 1 && isHeading(lines[0])){
+        out.push('<h3>' + esc(stripMark(lines[0])) + '</h3>'); return;
+      }
+
+      var text;
+      if(state.unwrap){
+        text = lines.reduce(function(acc, line, i){
+          if(i === 0) return line;
+          var bullet = /^([・\-*>＞●○◆■□▼▽※]|[0-9０-９]+[.．、)）])/.test(line);
+          var prevShort = lines[i-1].length < (state.latin ? 30 : 12);
+          if(bullet || prevShort) return acc + SEP + line;
+          var prev = lines[i-1];
+          var sp = /[A-Za-z0-9,.;:)\]'"’]$/.test(prev) && /^[A-Za-z0-9(\['"‘]/.test(line);
+          return acc + (sp ? ' ' : '') + line;
+        }, '');
+      } else {
+        text = lines.join(SEP);
+      }
+
+      text.split(SEP).forEach(function(para){
+        if(!para.trim()) return;
+        out.push('<p' + (first ? ' class="first"' : '') + '>' + link(esc(para)) + '</p>');
+        first = false;
+      });
+    });
+    return out.join('');
+  }
+
+  // 区切り線。メルマガは全角ハイフン・罫線素片・記号の繰り返しと、書体がまちまちなので
+  // 「記号が3つ以上並んでいるだけの行」を広く拾う（半角ハイフンだけを見ると取りこぼす）。
+  function isRule(l){
+    var s = l.trim().replace(/[ \t　]/g,'');
+    if(s.length < 3) return false;
+    if(/^[-=_*+#~^.。・､,:;‐-―─-╿ー－＿～〜＊＃·…■-◿★☆]+$/.test(s)) return true;
+    return /^(.)\1{2,}$/.test(s) && !/[0-9A-Za-z぀-ヿ一-鿿]/.test(s[0]);
+  }
+
+  function isHeading(l){
+    var s = l.trim();
+    if(s.length > 34) return false;
+    if(/^[■●◆▼【\[#\*☆★◎〈《「]/.test(s)) return true;
+    if(/[。．.!?！？、,]$/.test(s)) return false;
+    return s.length <= 22;
+  }
+  function stripMark(s){ return s.trim().replace(/^[■●◆▼\*#\s]+/,'').replace(/[\s#\*]+$/,''); }
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function link(s){
+    return s.replace(/(https?:\/\/[^\s<「」（）()]+)/g, function(u){
+      return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>';
+    });
+  }
+
+  /* ---------- 版面 ---------- */
+  function layout(keepRatio){
+    var ratio = keepRatio && state.max > 0 ? flow.scrollLeft / state.max : 0;
+
+    var W = stage.clientWidth;
+    var side = Math.max(28, Math.min(130, Math.round(W * 0.075)));
+    var inner = W - side * 2;
+    var cols = state.spread && inner > 760 ? 2 : 1;
+    var gap  = cols === 2 ? Math.max(56, Math.round(inner * 0.07)) : 0;
+    var colW = cols === 2 ? Math.floor((inner - gap) / 2) : Math.min(inner, 660);
+    var boxW = cols === 2 ? inner : colW;
+
+    flow.style.left = Math.round(side + (inner - boxW) / 2) + 'px';
+    flow.style.right = flow.style.left;
+    flow.style.width = boxW + 'px';
+    flow.style.paddingTop = '2px';
+    flow.style.columnWidth = colW + 'px';
+    flow.style.columnGap = gap + 'px';
+    flow.style.fontSize = state.size + 'px';
+    flow.style.lineHeight = String(LH[state.lh]);
+
+    flow.scrollLeft = 0;
+    state.step  = flow.clientWidth + gap;
+    state.max   = Math.max(0, flow.scrollWidth - flow.clientWidth);
+    state.pages = Math.max(1, Math.ceil(state.max / state.step) + 1);
+
+    go(Math.round(ratio * state.max / state.step), false);
+  }
+
+  /* ---------- めくり ---------- */
+  var anim = null;
+  function go(page, animate){
+    page = Math.max(0, Math.min(state.pages - 1, page));
+    state.page = page;
+    var to = Math.min(state.max, page * state.step);
+    if(anim){ cancelAnimationFrame(anim); anim = null; }
+    if(animate === false){ flow.scrollLeft = to; paint(); return; }
+    var from = flow.scrollLeft, d = to - from, t0 = null, dur = 240;
+    if(Math.abs(d) < 1){ paint(); return; }
+    function tick(ts){
+      if(t0 === null) t0 = ts;
+      var k = Math.min(1, (ts - t0) / dur);
+      var e = k < .5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
+      flow.scrollLeft = from + d * e;
+      if(k < 1){ anim = requestAnimationFrame(tick); } else { anim = null; paint(); }
+    }
+    anim = requestAnimationFrame(tick);
+  }
+  function paint(){
+    $('count').textContent = (state.page + 1) + ' / ' + state.pages;
+    var p = state.pages <= 1 ? 100 : Math.round(state.page / (state.pages - 1) * 100);
+    $('fill').style.width = p + '%';
+    $('pct').textContent = p + '%';
+  }
+
+  /* ---------- 操作 ---------- */
+  function open(){
+    var raw = $('src').value;
+    if(!raw.trim()){ $('src').focus(); return; }
+    flow.innerHTML = build(raw);
+    $('gate').style.display = 'none';
+    $('reader').classList.add('on');
+    $('bar').classList.add('show');
+    setTimeout(function(){ $('bar').classList.remove('show'); }, 2400);
+    applyFonts();
+    layout(false);
+  }
+  function close(){
+    $('reader').classList.remove('on');
+    $('gate').style.display = 'flex';
+    $('src').focus();
+  }
+
+  $('go').onclick = open;
+  $('back').onclick = close;
+  $('tapNext').onclick = function(){ go(state.page + 1, true); };
+  $('tapPrev').onclick = function(){ go(state.page - 1, true); };
+  $('lang').onclick = function(){ lang = lang === 'ja' ? 'en' : 'ja'; applyLang(); };
+
+  $('unwrapToggle').onclick = function(){
+    state.unwrap = !state.unwrap;
+    this.setAttribute('aria-pressed', String(state.unwrap));
+    this.lastChild.textContent = ': ' + (state.unwrap ? 'ON' : 'OFF');
+  };
+  $('lhSeg').onclick = function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    state.lh = +b.dataset.lh;
+    [].forEach.call(this.children, function(c){ c.setAttribute('aria-pressed', String(c === b)); });
+    layout(true);
+  };
+  $('spreadSeg').onclick = function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    state.spread = b.dataset.sp === '1';
+    [].forEach.call(this.children, function(c){ c.setAttribute('aria-pressed', String(c === b)); });
+    layout(true);
+  };
+  $('bigger').onclick  = function(){ state.size = Math.min(30, state.size + 1); layout(true); };
+  $('smaller').onclick = function(){ state.size = Math.max(14, state.size - 1); layout(true); };
+
+  document.addEventListener('keydown', function(e){
+    if($('gate').style.display !== 'none'){
+      if((e.metaKey || e.ctrlKey) && e.key === 'Enter') open();
+      return;
+    }
+    if(e.target && /SELECT|INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    switch(e.key){
+      case 'ArrowRight': case 'PageDown': case ' ': case 'j':
+        e.preventDefault(); go(state.page + 1, true); break;
+      case 'ArrowLeft': case 'PageUp': case 'k':
+        e.preventDefault(); go(state.page - 1, true); break;
+      case 'Home': go(0, true); break;
+      case 'End': go(state.pages - 1, true); break;
+      case 'Escape': close(); break;
+    }
+  });
+
+  var wheelLock = 0;
+  stage.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var now = Date.now();
+    if(now - wheelLock < 400) return;
+    var d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if(Math.abs(d) < 8) return;
+    wheelLock = now;
+    go(state.page + (d > 0 ? 1 : -1), true);
+  }, { passive:false });
+
+  var rz;
+  addEventListener('resize', function(){
+    if($('reader').classList.contains('on')){
+      clearTimeout(rz); rz = setTimeout(function(){ layout(true); }, 140);
+    }
+  });
+
+  document.documentElement.dataset.theme = state.theme;
+  if((navigator.language || '').toLowerCase().indexOf('ja') !== 0){ lang = 'en'; }
+  applyLang();
+  applyFonts();
+  $('src').focus();
+})();
+</script>
+</body>
+</html>
