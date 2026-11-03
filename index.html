@@ -426,7 +426,8 @@
   function stripMark(s){ return s.trim().replace(/^[■●◆▼\*#\s]+/,'').replace(/[\s#\*]+$/,''); }
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function link(s){
-    return s.replace(/(https?:\/\/[^\s<「」（）()]+)/g, function(u){
+    // esc() の後に走るので < は &lt; になっている。&lt; &gt; &quot; の並びで止める
+    return s.replace(/(https?:\/\/(?:(?!&lt;|&gt;|&quot;)[^\s<「」（）()])+)/g, function(u){
       return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>';
     });
   }
