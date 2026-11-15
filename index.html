@@ -9,16 +9,16 @@
 <style>
   :root{
     --bg:#ffffff; --fg:#1b1a18; --dim:#9a948c; --rule:rgba(0,0,0,.09);
-    --size:19px; --lh:1.72;
+    --size:19px; --lh:1.72; --link:#0066cc;
     --jp: "Hiragino Sans","Yu Gothic",system-ui,sans-serif;
     --la: -apple-system,"Segoe UI",system-ui,sans-serif;
     --ui: "Hiragino Sans","Yu Gothic",-apple-system,"Segoe UI",system-ui,sans-serif;
   }
   /* 配色は Apple Books の Themes から実測（2026-11-02、画面写真の画素を採取） */
-  html[data-theme="white"]{--bg:#ffffff;--fg:#1c1c1e;--dim:#9a948c;--rule:rgba(0,0,0,.09)}
-  html[data-theme="paper"]{--bg:#eeeced;--fg:#282425;--dim:#8b8688;--rule:rgba(0,0,0,.11)}
-  html[data-theme="calm"] {--bg:#f0e2c8;--fg:#40332b;--dim:#9b8a72;--rule:rgba(0,0,0,.12)}
-  html[data-theme="quiet"]{--bg:#4a494e;--fg:#c9c8cd;--dim:#908f95;--rule:rgba(255,255,255,.14)}
+  html[data-theme="white"]{--bg:#ffffff;--fg:#1c1c1e;--dim:#9a948c;--rule:rgba(0,0,0,.09);--link:#0066cc}
+  html[data-theme="paper"]{--bg:#eeeced;--fg:#282425;--dim:#8b8688;--rule:rgba(0,0,0,.11);--link:#0b60c0}
+  html[data-theme="calm"] {--bg:#f0e2c8;--fg:#40332b;--dim:#9b8a72;--rule:rgba(0,0,0,.12);--link:#0a549f}
+  html[data-theme="quiet"]{--bg:#4a494e;--fg:#c9c8cd;--dim:#908f95;--rule:rgba(255,255,255,.14);--link:#8ec2ff}
 
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
@@ -138,7 +138,8 @@
   }
   #flow h3:first-child{margin-top:0}
   #flow hr{border:0;border-top:1px solid var(--rule);margin:1.4em 0}
-  #flow a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule);word-break:break-all}
+  #flow a{color:var(--link);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--link) 35%,transparent);word-break:break-all}
+  #flow a:hover{border-bottom-color:var(--link)}
 
   #foot{
     height:40px;flex:0 0 auto;display:flex;align-items:center;gap:14px;
