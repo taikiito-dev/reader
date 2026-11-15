@@ -97,6 +97,12 @@
   .seg button:hover{color:var(--fg);background:var(--rule)}
   .seg button[aria-pressed="true"]{color:var(--fg);background:var(--rule)}
 
+  .seg button .ico{
+    display:block;width:22px;height:16px;fill:none;
+    stroke:currentColor;stroke-width:1.4;
+  }
+  .seg button[aria-pressed="true"] .ico rect{fill:currentColor;fill-opacity:.18}
+
   select{
     font:inherit;font-size:12px;color:var(--fg);background:transparent;
     border:1px solid var(--rule);border-radius:7px;padding:6px 8px;cursor:pointer;outline:none;
@@ -177,6 +183,7 @@
 <section id="reader">
   <div id="bar">
     <button id="back" class="link" data-t="back">貼り直す</button>
+    <button id="lang2" class="link">English</button>
     <span class="sp"></span>
 
     <span class="set">
@@ -209,8 +216,17 @@
     <span class="set">
       <span class="lab" data-t="labPage">組</span>
       <span class="seg" id="spreadSeg">
-        <button data-sp="1" aria-pressed="true" data-t="two">見開き</button>
-        <button data-sp="0" data-t="one">1ページ</button>
+        <button data-sp="1" aria-pressed="true" data-tt="two">
+          <svg class="ico" viewBox="0 0 22 16" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="8" height="13" rx="1"/>
+            <rect x="12.5" y="1.5" width="8" height="13" rx="1"/>
+          </svg>
+        </button>
+        <button data-sp="0" data-tt="one">
+          <svg class="ico" viewBox="0 0 22 16" aria-hidden="true">
+            <rect x="7" y="1.5" width="8" height="13" rx="1"/>
+          </svg>
+        </button>
       </span>
     </span>
 
@@ -266,6 +282,11 @@
     });
     $('src').placeholder = d.ph;
     $('lang').textContent = d.other;
+    $('lang2').textContent = d.other;
+    // 記号で示すボタンは、文字を入れ替えるのではなく説明（title）だけを差し替える
+    [].forEach.call(document.querySelectorAll('[data-tt]'), function(el){
+      var k = el.dataset.tt; if(d[k] != null){ el.title = d[k]; el.setAttribute('aria-label', d[k]); }
+    });
     $('unwrapToggle').lastChild.textContent = ': ' + (state.unwrap ? 'ON' : 'OFF');
     if(typeof fillSelects === 'function') fillSelects();
   }
@@ -274,15 +295,34 @@
   // 和文: 日本語の字を持つ書体だけを並べる
   var JP = [
     { id:'noto-sans', label:'Noto Sans JP（ゴシック）', en:'Noto Sans JP (sans)',
-      q:'Noto+Sans+JP:wght@400;600', stack:'"Noto Sans JP"', serif:false },
+      q:'Noto+Sans+JP:wght@400;600', stack:'"Noto Sans JP"', serif:false, g:'web' },
     { id:'zen-kaku',  label:'Zen Kaku Gothic New（ゴシック）', en:'Zen Kaku Gothic New (sans)',
-      q:'Zen+Kaku+Gothic+New:wght@400;700', stack:'"Zen Kaku Gothic New"', serif:false },
+      q:'Zen+Kaku+Gothic+New:wght@400;700', stack:'"Zen Kaku Gothic New"', serif:false, g:'web' },
+    { id:'biz-gothic',label:'BIZ UDPゴシック（読みやすさ重視）', en:'BIZ UDPGothic (high legibility)',
+      q:'BIZ+UDPGothic:wght@400;700', stack:'"BIZ UDPGothic"', serif:false, g:'web' },
+    { id:'zen-maru',  label:'Zen Maru Gothic（丸ゴシック）', en:'Zen Maru Gothic (rounded)',
+      q:'Zen+Maru+Gothic:wght@400;700', stack:'"Zen Maru Gothic"', serif:false, g:'web' },
     { id:'noto-serif',label:'Noto Serif JP（明朝）', en:'Noto Serif JP (mincho)',
-      q:'Noto+Serif+JP:wght@400;600', stack:'"Noto Serif JP"', serif:true },
+      q:'Noto+Serif+JP:wght@400;600', stack:'"Noto Serif JP"', serif:true, g:'web' },
     { id:'zen-old',   label:'Zen Old Mincho（明朝）', en:'Zen Old Mincho (mincho)',
-      q:'Zen+Old+Mincho:wght@400;600', stack:'"Zen Old Mincho"', serif:true },
-    { id:'jp-local',  label:'端末のフォント（ネット不要）', en:'System font (works offline)',
-      stack:'"Hiragino Sans","Yu Gothic"', serif:false }
+      q:'Zen+Old+Mincho:wght@400;600', stack:'"Zen Old Mincho"', serif:true, g:'web' },
+    { id:'shippori',  label:'しっぽり明朝（明朝）', en:'Shippori Mincho (mincho)',
+      q:'Shippori+Mincho:wght@400;600', stack:'"Shippori Mincho"', serif:true, g:'web' },
+    { id:'biz-mincho',label:'BIZ UDP明朝', en:'BIZ UDPMincho',
+      q:'BIZ+UDPMincho', stack:'"BIZ UDPMincho"', serif:true, g:'web' },
+    { id:'klee',      label:'Klee One（楷書・手書き風）', en:'Klee One (handwritten)',
+      q:'Klee+One:wght@400;600', stack:'"Klee One"', serif:true, g:'web' },
+    // 端末にある書体。ヒラギノと游書体は配布できないので、入っている端末でだけ出る。
+    { id:'hiragino-kaku', label:'ヒラギノ角ゴ（Mac）', en:'Hiragino Sans (Mac)',
+      stack:'"Hiragino Sans","Hiragino Kaku Gothic ProN"', serif:false, g:'local' },
+    { id:'hiragino-min',  label:'ヒラギノ明朝（Mac）', en:'Hiragino Mincho (Mac)',
+      stack:'"Hiragino Mincho ProN","Hiragino Mincho Pro"', serif:true, g:'local' },
+    { id:'yu-gothic', label:'游ゴシック（Mac / Windows）', en:'Yu Gothic (Mac / Windows)',
+      stack:'"YuGothic","Yu Gothic","Yu Gothic UI"', serif:false, g:'local' },
+    { id:'yu-mincho', label:'游明朝（Mac / Windows）', en:'Yu Mincho (Mac / Windows)',
+      stack:'"YuMincho","Yu Mincho"', serif:true, g:'local' },
+    { id:'jp-local',  label:'端末におまかせ（ネット不要）', en:'Whatever the device has (offline)',
+      stack:'"Hiragino Sans","Yu Gothic"', serif:false, g:'local' }
   ];
   // 🔴 欧文: 日本語の字を持たない書体だけにする。ここに system-ui / sans-serif を混ぜると
   //    日本語がその場で拾われてしまい、下の和文指定まで降りてこない（2026-11-02 の不具合の真因）。
@@ -334,12 +374,24 @@
     [[JP,'jpSel','jp'],[LA,'laSel','la']].forEach(function(t){
       var list = t[0], sel = $(t[1]), key = t[2];
       sel.innerHTML = '';
+      var GL = { web: lang === 'ja' ? 'ウェブフォント' : 'Web fonts',
+                 local: lang === 'ja' ? '端末にある書体' : 'Fonts on this device' };
+      var groups = {};
       list.forEach(function(f){
         var o = document.createElement('option');
         o.value = f.id;
         o.textContent = lang === 'ja' ? f.label : f.en;
         if(f.id === state[key]) o.selected = true;
-        sel.appendChild(o);
+        if(f.g){
+          if(!groups[f.g]){
+            groups[f.g] = document.createElement('optgroup');
+            groups[f.g].label = GL[f.g] || f.g;
+            sel.appendChild(groups[f.g]);
+          }
+          groups[f.g].appendChild(o);
+        } else {
+          sel.appendChild(o);
+        }
       });
       sel.onchange = function(){ state[key] = this.value; applyFonts(); layout(true); };
     });
@@ -509,7 +561,9 @@
   $('back').onclick = close;
   $('tapNext').onclick = function(){ go(state.page + 1, true); };
   $('tapPrev').onclick = function(){ go(state.page - 1, true); };
-  $('lang').onclick = function(){ lang = lang === 'ja' ? 'en' : 'ja'; applyLang(); };
+  function toggleLang(){ lang = lang === 'ja' ? 'en' : 'ja'; applyLang(); }
+  $('lang').onclick = toggleLang;
+  $('lang2').onclick = toggleLang;
 
   $('unwrapToggle').onclick = function(){
     state.unwrap = !state.unwrap;
