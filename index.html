@@ -464,44 +464,53 @@
     var blocks = raw.replace(/\r\n?/g,'\n').split(/\n[ \t　]*\n+/);
     var out = [], first = true;
 
+    // 🔴 区切り線と見出しは「1行だけの段落」に限らず、段落の途中にも現れる。
+    //    メルマガは空行を入れずに ++++++ の罫線や ■目次 を挟んでくるので、
+    //    行ごとに見て、本文の積み上げを一度閉じてから挟む（2026-11-15）。
     blocks.forEach(function(block){
       var lines = block.split('\n')
         .map(function(l){ return l.replace(/[ \t　]+$/,''); })
         .filter(function(l){ return l.trim() !== ''; });
       if(!lines.length) return;
 
-      if(lines.length === 1 && isRule(lines[0])){ out.push('<hr>'); return; }
-      if(lines.length === 1 && isHeading(lines[0])){
-        out.push('<h3>' + esc(stripMark(lines[0])) + '</h3>'); return;
+      var cur = '', prev = null;
+      function flush(){
+        if(cur.trim()){
+          out.push('<p' + (first ? ' class="first"' : '') + '>' + link(esc(cur)) + '</p>');
+          first = false;
+        }
+        cur = ''; prev = null;
       }
 
-      var text;
-      if(state.unwrap){
-        text = lines.reduce(function(acc, line, i){
-          if(i === 0) return line;
-          var prev = lines[i-1];
-          var bullet = /^([・\-*>＞●○◆■□▼▽※]|[0-9０-９]+[.．、)）])/.test(line);
-          // 🔴 短い行の前で切る規則は「文として閉じていない行」に限る。
-          //    閉じている短文（例「機械翻訳では恋愛は難しいですからね。」）で切ると、
-          //    1文1行で書かれたメルマガが段落だらけになり、改行が不規則に見える（2026-11-15）。
-          var closed = state.latin ? /[.!?"'’”)\]]$/.test(prev) : /[。．！？!?」』）)、，,]$/.test(prev);
-          var prevShort = prev.length < (state.latin ? 30 : 12) && !closed;
-          // 『…』や【…】で始まる行は題名・見出しの類。前の文に続けない。
-          var titleish = /^[『「【［〈《]/.test(line);
-          if(bullet || titleish || prevShort) return acc + SEP + line;
-          var sp = /[A-Za-z0-9,.;:)\]'"’]$/.test(prev) && /^[A-Za-z0-9(\['"‘]/.test(line);
-          return acc + (sp ? ' ' : '') + line;
-        }, '');
-      } else {
-        text = lines.join(SEP);
-      }
+      lines.forEach(function(line){
+        // 罫線が2本続く・先頭にある、は飾りなので1本に畳む
+        if(isRule(line)){
+          flush();
+          if(out.length && out[out.length-1] !== '<hr>') out.push('<hr>');
+          return;
+        }
+        if(isHeading(line, lines.length === 1)){
+          flush(); out.push('<h3>' + esc(stripMark(line)) + '</h3>'); return;
+        }
+        if(!cur){ cur = line; prev = line; return; }
+        if(!state.unwrap){ flush(); cur = line; prev = line; return; }
 
-      text.split(SEP).forEach(function(para){
-        if(!para.trim()) return;
-        out.push('<p' + (first ? ' class="first"' : '') + '>' + link(esc(para)) + '</p>');
-        first = false;
+        var bullet  = /^([・\-*>＞●○◆■□▼▽※]|\.{3}|…|[0-9０-９]+[.．、)）])/.test(line);
+        // 「…」は会話や引用で文頭にもよく出るので題名扱いにしない（段落が割れる）
+        var titleish = /^[『【［〈《]/.test(line);
+        // 短い行の前で切るのは「文として閉じていない行」のときだけ。閉じた短文で切ると、
+        // 1文1行で書かれたメルマガが段落だらけになる。
+        var closed = state.latin ? /[.!?"\'’”)\]]$/.test(prev) : /[。．！？!?」』）)、，,]$/.test(prev);
+        var prevShort = prev.length < (state.latin ? 30 : 12) && !closed;
+
+        if(bullet || titleish || prevShort){ flush(); cur = line; prev = line; return; }
+        var sp = /[A-Za-z0-9,.;:)\]\'"’]$/.test(prev) && /^[A-Za-z0-9(\[\'"‘]/.test(line);
+        cur += (sp ? ' ' : '') + line;
+        prev = line;
       });
+      flush();
     });
+    while(out.length && out[out.length-1] === '<hr>') out.pop();
     return out.join('');
   }
 
@@ -514,10 +523,14 @@
     return /^(.)\1{2,}$/.test(s) && !/[0-9A-Za-z぀-ヿ一-鿿]/.test(s[0]);
   }
 
-  function isHeading(l){
+  // alone = その段落にその1行しか無いとき。本文の途中の短い行まで見出しにすると、
+  // 会話調の1文1行メルマガが見出しだらけになる。
+  function isHeading(l, alone){
     var s = l.trim();
     if(s.length > 34) return false;
-    if(/^[■●◆▼【\[#\*☆★◎〈《「]/.test(s)) return true;
+    if(/^[■●◆▼【\[#\*◎〈《]/.test(s) && !/[。．.!?！？、,]$/.test(s)) return true;
+    if(!alone) return false;
+    if(/^[☆★「]/.test(s)) return true;
     if(/[。．.!?！？、,]$/.test(s)) return false;
     return s.length <= 22;
   }
