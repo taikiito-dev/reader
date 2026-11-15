@@ -132,9 +132,10 @@
     text-align:justify; line-break:strict; overflow-wrap:break-word;
     font-feature-settings:"palt" 1;
   }
-  /* 和文は字下げが段落の区切り。アキは半行ぶんだけ置く（.9em は広すぎ、0 は詰まりすぎ。
-     2026-11-15 に本人が両方を画面で見て .45em に落ち着いた）。 */
-  #flow p{margin:0 0 .45em;text-indent:1em}
+  /* 日本語の書籍組は「字下げ1字のみ・段落アキなし」。行送りで読ませる組なので、
+     アキを足すと本に見えなくなる（2026-11-15、.9em → 0 → .45em と試して書籍の組に合わせた）。
+     詰まって見えるときは段落アキではなく行間で調整する。 */
+  #flow p{margin:0;text-indent:1em}
   #flow p.first{text-indent:0}
   #flow.latin{text-align:left;hyphens:auto}
   #flow.latin p{text-indent:0;margin:0 0 1em}
