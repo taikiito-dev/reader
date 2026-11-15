@@ -21,7 +21,7 @@
   html[data-theme="quiet"]{--bg:#4a494e;--fg:#c9c8cd;--dim:#908f95;--rule:rgba(255,255,255,.14);--link:#8ec2ff}
 
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
+  html,body{height:100%;margin:0;overscroll-behavior:none}
   body{
     background:var(--bg); color:var(--fg); font-family:var(--ui);
     /* antialiased は macOS で画線を細らせる。Mail や Books と同じ太さに見せるため既定のまま使う
@@ -69,7 +69,9 @@
   button.link:hover{color:var(--fg)}
 
   /* ---------- 読む面 ---------- */
-  #reader{position:fixed;inset:0;display:none;flex-direction:column}
+  /* iPhone のアドレスバーは position:fixed の下に重なる（fixed はラージビューポート基準）。
+     dvh で「今見えている高さ」に合わせる（2026-11-15、スマホ対応）。 */
+  #reader{position:fixed;inset:0;height:100%;height:100dvh;display:none;flex-direction:column}
   #reader.on{display:flex}
 
   /* 幅が狭いときに折り返して壊れないよう、横に流して隠れたぶんはスクロールで出す */
@@ -167,6 +169,13 @@
 
   .tap{position:absolute;top:0;bottom:0;width:20%;cursor:pointer;z-index:2}
   .tap.prev{left:0} .tap.next{right:0}
+  /* 指で読むとき: 真ん中を叩いたら操作バーを出す（マウスの mousemove に当たるもの）。
+     マウス環境では邪魔なので hover:none のときだけ置く。 */
+  .tapMid{display:none}
+  @media (hover:none){
+    .tapMid{display:block;position:absolute;top:0;bottom:0;left:20%;right:20%;z-index:2}
+    #stage{touch-action:manipulation}
+  }
 
   /* 狭い窓: まず群のラベルを落とし、次に群の間隔と選択肢の幅を詰める */
   @media (max-width:1180px){ .set > .lab{display:none} }
@@ -174,6 +183,13 @@
     .set{padding:0 9px}
     select{max-width:116px}
     #bar{padding:0 10px}
+  }
+  /* 760px 以下は常に1段組なので、見開き/1ページの切替は出さない */
+  @media (max-width:760px){
+    #spreadSet{display:none}
+    #gate{padding:20px}
+    #bar{height:46px}
+    #foot{padding:0 14px 4px;gap:10px}
   }
 </style>
 </head>
@@ -200,10 +216,10 @@
     <div class="row">
       <button class="primary" id="go" data-t="read">読む</button>
       <button id="unwrapToggle" aria-pressed="true"><span data-t="unwrap">改行をたたむ</span>: ON</button>
-      <span class="hint" data-t="hint">← → かスペースでめくる</span>
+      <span class="hint" id="hint" data-t="hint">← → かスペースでめくる</span>
       <span class="sp"></span>
       <!-- 版の目印。直したのに直っていないときは、まずここが新しいかを見る -->
-      <span class="hint" id="ver">2026-11-15d</span>
+      <span class="hint" id="ver">2026-11-15e</span>
     </div>
   </div>
 </section>
@@ -241,7 +257,7 @@
       </span>
     </span>
 
-    <span class="set">
+    <span class="set" id="spreadSet">
       <span class="lab" data-t="labPage">組</span>
       <span class="seg" id="spreadSeg">
         <button data-sp="1" aria-pressed="true" data-tt="two">
@@ -268,6 +284,7 @@
     <div id="flow"></div>
     <div class="tap prev" id="tapPrev"></div>
     <div class="tap next" id="tapNext"></div>
+    <div class="tapMid" id="tapMid"></div>
   </div>
 
   <div id="foot">
@@ -292,14 +309,14 @@
       safeHead:'貼った文章はどこにも送りません。',
       safeBody:'組み直しはこのブラウザの中だけで行います。サーバーに送信せず、保存もしません。タブを閉じると消えます。',
       ph:'ここに本文を貼る', read:'読む', unwrap:'改行をたたむ',
-      hint:'← → かスペースでめくる', back:'貼り直す',
+      hint:'← → かスペースでめくる', hintTouch:'左右にスワイプ、または画面の端をタップでめくる', back:'貼り直す',
       labJp:'日本語', labLa:'英語', labLh:'行間', labSize:'字', labPage:'組', labColor:'色',
       lhS:'詰', lhM:'中', lhL:'広', two:'見開き', one:'1ページ', other:'English' },
     en:{ title:'Paste to read', lede:'Paste a long text and it is re-set into pages that fit your screen.',
       safeHead:'Your text never leaves this page.',
       safeBody:'It is laid out inside your own browser. Nothing is sent to a server and nothing is stored. It is gone when you close the tab.',
       ph:'Paste your text here', read:'Read', unwrap:'Unwrap line breaks',
-      hint:'Arrow keys or space to turn the page', back:'New text',
+      hint:'Arrow keys or space to turn the page', hintTouch:'Swipe sideways, or tap the edge of the screen', back:'New text',
       labJp:'Japanese', labLa:'Latin', labLh:'Leading', labSize:'Size', labPage:'Layout', labColor:'Color',
       lhS:'Tight', lhM:'Normal', lhL:'Loose', two:'Two-up', one:'Single', other:'日本語' }
   };
@@ -553,7 +570,8 @@
     var ratio = keepRatio && state.max > 0 ? flow.scrollLeft / state.max : 0;
 
     var W = stage.clientWidth;
-    var side = Math.max(28, Math.min(130, Math.round(W * 0.075)));
+    // 狭い画面では左右の余白を削って1行の字数を確保する（スマホ、2026-11-15）
+    var side = Math.max(W < 560 ? 18 : 28, Math.min(130, Math.round(W * 0.075)));
     var inner = W - side * 2;
     var cols = state.spread && inner > 760 ? 2 : 1;
     var gap  = cols === 2 ? Math.max(56, Math.round(inner * 0.07)) : 0;
@@ -639,6 +657,35 @@
     if(e.clientY <= 72) showBar(0); else hideBar();
   });
 
+  /* ---------- 指で読むとき（2026-11-15） ----------
+     指にはカーソルが無いので mousemove では操作バーが一生出ない。
+     真ん中のタップで出し入れし、左右のスワイプでめくる。 */
+  var touch = matchMedia('(hover:none)').matches;
+  $('tapMid').onclick = function(e){
+    // 本文のリンクを塞がないよう、重なっている要素を見てから判断する
+    this.style.pointerEvents = 'none';
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    this.style.pointerEvents = '';
+    var a = el && el.closest ? el.closest('#flow a') : null;
+    if(a){ window.open(a.href, '_blank', 'noopener'); return; }
+    if($('bar').classList.contains('show')) hideBar(); else showBar(3200);
+  };
+  var sx = 0, sy = 0, st = 0;
+  stage.addEventListener('touchstart', function(e){
+    if(e.touches.length !== 1){ st = 0; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+  }, { passive:true });
+  stage.addEventListener('touchend', function(e){
+    if(!st) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - sx, dy = t.clientY - sy, ms = Date.now() - st;
+    st = 0;
+    if(ms > 700 || Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    e.preventDefault();          // 続く click（タップ扱い）を止める
+    hideBar();
+    go(state.page + (dx < 0 ? 1 : -1), true);
+  }, { passive:false });
+
   $('go').onclick = open;
   $('back').onclick = close;
   $('tapNext').onclick = function(){ go(state.page + 1, true); };
@@ -701,6 +748,10 @@
       clearTimeout(rz); rz = setTimeout(function(){ layout(true); }, 140);
     }
   });
+
+  // 画面が狭いと19pxでは1行の字数が足りない（スマホの既定は17px。2026-11-15）
+  if(innerWidth < 700) state.size = 17;
+  if(touch){ $('hint').setAttribute('data-t', 'hintTouch'); }
 
   document.documentElement.dataset.theme = state.theme;
   if((navigator.language || '').toLowerCase().indexOf('ja') !== 0){ lang = 'en'; }
