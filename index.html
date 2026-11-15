@@ -331,9 +331,10 @@
     { id:'hiragino-min',  label:'ヒラギノ明朝（Mac）', en:'Hiragino Mincho (Mac)',
       stack:'"Hiragino Mincho ProN","Hiragino Mincho Pro"', serif:true, g:'local' },
     { id:'yu-gothic', label:'游ゴシック（Mac / Windows）', en:'Yu Gothic (Mac / Windows)',
-      stack:'"YuGothic","Yu Gothic","Yu Gothic UI"', serif:false, g:'local' },
+      stack:'"YuGothic","Yu Gothic","游ゴシック体","游ゴシック","Yu Gothic UI"', serif:false, g:'local' },
+    // 游明朝は和文名でしか引けない環境がある（Macは「游明朝体」で登録。欧文名だけだと外れる）
     { id:'yu-mincho', label:'游明朝（Mac / Windows）', en:'Yu Mincho (Mac / Windows)',
-      stack:'"YuMincho","Yu Mincho"', serif:true, g:'local' },
+      stack:'"YuMincho","Yu Mincho","游明朝体","游明朝","YuMincho +36p Kana"', serif:true, g:'local' },
     { id:'jp-local',  label:'端末におまかせ（ネット不要）', en:'Whatever the device has (offline)',
       stack:'"Hiragino Sans","Yu Gothic"', serif:false, g:'local' }
   ];
@@ -352,8 +353,9 @@
       stack:'"Helvetica Neue",Helvetica,Arial' }
   ];
 
+  // 既定の和文は BIZ UDPゴシック（本人が「これが一番読みやすい」と決めた。2026-11-15）
   var state = { unwrap:true, spread:true, size:19, lh:1,
-                jp:'noto-sans', la:'inter', theme:'white',
+                jp:'biz-gothic', la:'inter', theme:'white',
                 page:0, pages:1, step:1, max:0, latin:false };
 
   var loaded = {};
@@ -379,8 +381,27 @@
     load(j); load(l);
     // 欧文 → 和文 → 総称 の順に積む。欧文側には日本語の字が無いので、
     // 英字だけが欧文書体で出て、かなと漢字は和文書体まで降りてくる。
-    flow.style.fontFamily =
-      l.stack + ',' + j.stack + ',"Hiragino Sans","Yu Gothic",' + (j.serif ? 'serif' : 'sans-serif');
+    // 行き先が無いときの受け皿も明朝/ゴシックを合わせる。ここを常にゴシックにしていると、
+    // 端末に無い明朝を選んだとき「選んでも変わらない」に見える（2026-11-15）。
+    flow.style.fontFamily = l.stack + ',' + j.stack + ',' +
+      (j.serif ? '"Hiragino Mincho ProN","YuMincho",serif' : '"Hiragino Sans","Yu Gothic",sans-serif');
+  }
+
+  // 端末に入っていない書体を見分ける: 同じ文字を「その書体, monospace」と「monospace」で測り、
+  // 幅が同じなら拾われていない＝入っていない。document.fonts.check は未知の名前に true を返す実装がある。
+  var probe = null, haveCache = {};
+  function haveFont(family){
+    if(haveCache[family] != null) return haveCache[family];
+    if(!probe) probe = document.createElement('canvas').getContext('2d');
+    var text = 'あ漢A永';
+    probe.font = '32px monospace';
+    var base = probe.measureText(text).width;
+    probe.font = '32px ' + family + ', monospace';
+    var got = probe.measureText(text).width;
+    return (haveCache[family] = Math.abs(got - base) > 0.5);
+  }
+  function stackAvailable(stack){
+    return stack.split(',').some(function(f){ return haveFont(f.trim()); });
   }
 
   function fillSelects(){
@@ -394,6 +415,10 @@
         var o = document.createElement('option');
         o.value = f.id;
         o.textContent = lang === 'ja' ? f.label : f.en;
+        if(f.g === 'local' && f.id !== 'jp-local' && f.id !== 'la-local' && !stackAvailable(f.stack)){
+          o.disabled = true;
+          o.textContent += lang === 'ja' ? '（この端末に無い）' : ' (not on this device)';
+        }
         if(f.id === state[key]) o.selected = true;
         if(f.g){
           if(!groups[f.g]){
