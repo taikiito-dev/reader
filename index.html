@@ -75,7 +75,11 @@
     padding:0 18px;color:var(--dim);font-size:12px;
     opacity:0;transition:opacity .3s ease;
   }
-  #reader:hover #bar, #bar.show, #bar:focus-within{opacity:1}
+  /* マウスが画面のどこにあっても出る形だと、キーでめくっている間ずっと居座る。
+     出すのは「上端にカーソルを寄せたとき」だけ（JSの mousemove で .show を付け外し）。 */
+  #bar.show, #bar:focus-within{opacity:1}
+  #bar{pointer-events:none}
+  #bar.show, #bar:focus-within{pointer-events:auto}
   #bar .sp{flex:1}
 
   /* 群ごとに「ラベル＋操作」で縦に積み、群と群の間は仕切り線で離す */
@@ -549,8 +553,7 @@
     flow.innerHTML = build(raw);
     $('gate').style.display = 'none';
     $('reader').classList.add('on');
-    $('bar').classList.add('show');
-    setTimeout(function(){ $('bar').classList.remove('show'); }, 2400);
+    showBar(2400);
     applyFonts();
     layout(false);
   }
@@ -559,6 +562,23 @@
     $('gate').style.display = 'flex';
     $('src').focus();
   }
+
+  /* 操作バーの出し入れ: 上端にカーソルを寄せたら出し、下へ離れるかキーでめくったら消す */
+  var barTimer = null;
+  function showBar(ms){
+    clearTimeout(barTimer);
+    $('bar').classList.add('show');
+    if(ms) barTimer = setTimeout(hideBar, ms);
+  }
+  function hideBar(){
+    clearTimeout(barTimer);
+    if($('bar').contains(document.activeElement)) return;
+    $('bar').classList.remove('show');
+  }
+  document.addEventListener('mousemove', function(e){
+    if(!$('reader').classList.contains('on')) return;
+    if(e.clientY <= 72) showBar(0); else hideBar();
+  });
 
   $('go').onclick = open;
   $('back').onclick = close;
@@ -596,9 +616,9 @@
     if(e.target && /SELECT|INPUT|TEXTAREA/.test(e.target.tagName)) return;
     switch(e.key){
       case 'ArrowRight': case 'PageDown': case ' ': case 'j':
-        e.preventDefault(); go(state.page + 1, true); break;
+        e.preventDefault(); hideBar(); go(state.page + 1, true); break;
       case 'ArrowLeft': case 'PageUp': case 'k':
-        e.preventDefault(); go(state.page - 1, true); break;
+        e.preventDefault(); hideBar(); go(state.page - 1, true); break;
       case 'Home': go(0, true); break;
       case 'End': go(state.pages - 1, true); break;
       case 'Escape': close(); break;
