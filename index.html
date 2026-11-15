@@ -128,9 +128,9 @@
     text-align:justify; line-break:strict; overflow-wrap:break-word;
     font-feature-settings:"palt" 1;
   }
-  /* 和文は字下げが段落の区切りなので、段落アキは置かない（本の組と同じ）。
-     欧文は字下げをしないぶん、下の .latin でアキを付けて区切る。 */
-  #flow p{margin:0;text-indent:1em}
+  /* 和文は字下げが段落の区切り。アキは半行ぶんだけ置く（.9em は広すぎ、0 は詰まりすぎ。
+     2026-11-15 に本人が両方を画面で見て .45em に落ち着いた）。 */
+  #flow p{margin:0 0 .45em;text-indent:1em}
   #flow p.first{text-indent:0}
   #flow.latin{text-align:left;hyphens:auto}
   #flow.latin p{text-indent:0;margin:0 0 1em}
