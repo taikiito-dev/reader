@@ -276,7 +276,9 @@
 (function(){
   var $ = function(id){ return document.getElementById(id); };
   var flow = $('flow'), stage = $('stage');
-  var SEP = ' ';
+  // 段落の区切り印は本文に出ない文字を使う。空白にしていたせいで、『週刊金融日記 第576号 …』や
+  // 「（HN: オーダイル）」の中の空白でも段落が切れていた（2026-11-15、「改行がおかしい」の真因）。
+  var SEP = '\u0000';
   var LH = [1.56, 1.72, 1.90];
 
   /* ---------- 文言 ---------- */
@@ -477,10 +479,16 @@
       if(state.unwrap){
         text = lines.reduce(function(acc, line, i){
           if(i === 0) return line;
-          var bullet = /^([・\-*>＞●○◆■□▼▽※]|[0-9０-９]+[.．、)）])/.test(line);
-          var prevShort = lines[i-1].length < (state.latin ? 30 : 12);
-          if(bullet || prevShort) return acc + SEP + line;
           var prev = lines[i-1];
+          var bullet = /^([・\-*>＞●○◆■□▼▽※]|[0-9０-９]+[.．、)）])/.test(line);
+          // 🔴 短い行の前で切る規則は「文として閉じていない行」に限る。
+          //    閉じている短文（例「機械翻訳では恋愛は難しいですからね。」）で切ると、
+          //    1文1行で書かれたメルマガが段落だらけになり、改行が不規則に見える（2026-11-15）。
+          var closed = state.latin ? /[.!?"'’”)\]]$/.test(prev) : /[。．！？!?」』）)、，,]$/.test(prev);
+          var prevShort = prev.length < (state.latin ? 30 : 12) && !closed;
+          // 『…』や【…】で始まる行は題名・見出しの類。前の文に続けない。
+          var titleish = /^[『「【［〈《]/.test(line);
+          if(bullet || titleish || prevShort) return acc + SEP + line;
           var sp = /[A-Za-z0-9,.;:)\]'"’]$/.test(prev) && /^[A-Za-z0-9(\['"‘]/.test(line);
           return acc + (sp ? ' ' : '') + line;
         }, '');
