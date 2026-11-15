@@ -24,7 +24,9 @@
   html,body{height:100%;margin:0}
   body{
     background:var(--bg); color:var(--fg); font-family:var(--ui);
-    -webkit-font-smoothing:antialiased; overflow:hidden;
+    /* antialiased は macOS で画線を細らせる。Mail や Books と同じ太さに見せるため既定のまま使う
+       （2026-11-15、「同じヒラギノなのに Apple Mail の方が読みやすい」の一因） */
+    overflow:hidden;
     transition:background .35s ease, color .35s ease;
   }
 
@@ -70,17 +72,21 @@
   #reader{position:fixed;inset:0;display:none;flex-direction:column}
   #reader.on{display:flex}
 
+  /* 幅が狭いときに折り返して壊れないよう、横に流して隠れたぶんはスクロールで出す */
   #bar{
     height:52px;flex:0 0 auto;display:flex;align-items:center;
     padding:0 18px;color:var(--dim);font-size:12px;
     opacity:0;transition:opacity .3s ease;
+    overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none;
   }
+  #bar::-webkit-scrollbar{display:none}
+  #bar > *{flex:0 0 auto}
+  #bar > .sp{flex:1 0 8px}
   /* マウスが画面のどこにあっても出る形だと、キーでめくっている間ずっと居座る。
      出すのは「上端にカーソルを寄せたとき」だけ（JSの mousemove で .show を付け外し）。 */
   #bar.show, #bar:focus-within{opacity:1}
   #bar{pointer-events:none}
   #bar.show, #bar:focus-within{pointer-events:auto}
-  #bar .sp{flex:1}
 
   /* 群ごとに「ラベル＋操作」で縦に積み、群と群の間は仕切り線で離す */
   .set{display:flex;align-items:center;gap:7px;padding:0 15px;position:relative}
@@ -130,7 +136,8 @@
     font-family:var(--la),var(--jp),sans-serif;
     font-size:var(--size); line-height:var(--lh);
     text-align:justify; line-break:strict; overflow-wrap:break-word;
-    font-feature-settings:"palt" 1;
+    /* palt（かなを詰める）は広告・見出し向け。本文を1字ずつの桝に乗せる書籍組とは逆なので使わない。
+       Apple Mail / Books が同じヒラギノでも整って見える理由のひとつ（2026-11-15）。 */
   }
   /* 日本語の書籍組は「字下げ1字のみ・段落アキなし」。行送りで読ませる組なので、
      アキを足すと本に見えなくなる（2026-11-15、.9em → 0 → .45em と試して書籍の組に合わせた）。
@@ -158,6 +165,14 @@
 
   .tap{position:absolute;top:0;bottom:0;width:20%;cursor:pointer;z-index:2}
   .tap.prev{left:0} .tap.next{right:0}
+
+  /* 狭い窓: まず群のラベルを落とし、次に群の間隔と選択肢の幅を詰める */
+  @media (max-width:1180px){ .set > .lab{display:none} }
+  @media (max-width:900px){
+    .set{padding:0 9px}
+    select{max-width:116px}
+    #bar{padding:0 10px}
+  }
 </style>
 </head>
 <body>
