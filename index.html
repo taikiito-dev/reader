@@ -144,6 +144,8 @@
      詰まって見えるときは段落アキではなく行間で調整する。 */
   #flow p{margin:0;text-indent:1em}
   #flow p.first{text-indent:0}
+  /* 飾りの行・見出し行は原文のまま。字下げだけ外して独立させる */
+  #flow p.plain{text-indent:0}
   #flow.latin{text-align:left;hyphens:auto}
   #flow.latin p{text-indent:0;margin:0 0 1em}
   #flow h3{
@@ -201,7 +203,7 @@
       <span class="hint" data-t="hint">← → かスペースでめくる</span>
       <span class="sp"></span>
       <!-- 版の目印。直したのに直っていないときは、まずここが新しいかを見る -->
-      <span class="hint" id="ver">2026-11-15c</span>
+      <span class="hint" id="ver">2026-11-15d</span>
     </div>
   </div>
 </section>
@@ -486,19 +488,20 @@
       }
 
       lines.forEach(function(line){
-        // 罫線が2本続く・先頭にある、は飾りなので1本に畳む
-        if(isRule(line)){
+        // 🔴 文字は書き換えない（2026-11-15 本人の方針）。飾りの行も見出しの記号もそのまま出す。
+        //    こちらがやるのは「どこで段落を切るか」だけ。罫線に置き換えたり ■ を外したりしない。
+        if(isRule(line) || isHeading(line, lines.length === 1)){
           flush();
-          if(out.length && out[out.length-1] !== '<hr>') out.push('<hr>');
+          out.push('<p class="plain">' + link(esc(line.trim())) + '</p>');
+          first = false;
           return;
-        }
-        if(isHeading(line, lines.length === 1)){
-          flush(); out.push('<h3>' + esc(stripMark(line)) + '</h3>'); return;
         }
         if(!cur){ cur = line; prev = line; return; }
         if(!state.unwrap){ flush(); cur = line; prev = line; return; }
 
-        var bullet  = /^([・\-*>＞●○◆■□▼▽※]|\.{3}|…|[0-9０-９]+[.．、)）])/.test(line);
+        var bullet  = /^([・\-*>＞●○◆■□▼▽※★☆]|\.{3}|…|[0-9０-９]+[.．、)）])/.test(line);
+        // URLで終わる行の次は必ず切る。つなぐとURLが次の行を飲み込んでリンクが壊れる。
+        var prevUrl = /https?:\/\/\S+$/.test(prev);
         // 「…」は会話や引用で文頭にもよく出るので題名扱いにしない（段落が割れる）
         var titleish = /^[『【［〈《]/.test(line);
         // 短い行の前で切るのは「文として閉じていない行」のときだけ。閉じた短文で切ると、
@@ -506,14 +509,13 @@
         var closed = state.latin ? /[.!?"\'’”)\]]$/.test(prev) : /[。．！？!?」』）)、，,]$/.test(prev);
         var prevShort = prev.length < (state.latin ? 30 : 12) && !closed;
 
-        if(bullet || titleish || prevShort){ flush(); cur = line; prev = line; return; }
+        if(bullet || titleish || prevShort || prevUrl){ flush(); cur = line; prev = line; return; }
         var sp = /[A-Za-z0-9,.;:)\]\'"’]$/.test(prev) && /^[A-Za-z0-9(\[\'"‘]/.test(line);
         cur += (sp ? ' ' : '') + line;
         prev = line;
       });
       flush();
     });
-    while(out.length && out[out.length-1] === '<hr>') out.pop();
     return out.join('');
   }
 
