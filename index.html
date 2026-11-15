@@ -534,12 +534,14 @@
     var to = Math.min(state.max, page * state.step);
     if(anim){ cancelAnimationFrame(anim); anim = null; }
     if(animate === false){ flow.scrollLeft = to; paint(); return; }
-    var from = flow.scrollLeft, d = to - from, t0 = null, dur = 240;
+    // 速さの既定（2026-11-15 に調整）: 240ms の ease-in-out は出だしが粘って重く感じる。
+    // Apple Books のように「すぐ動いて静かに止まる」= 短め＋減速だけの曲線にする。
+    var from = flow.scrollLeft, d = to - from, t0 = null, dur = 170;
     if(Math.abs(d) < 1){ paint(); return; }
     function tick(ts){
       if(t0 === null) t0 = ts;
       var k = Math.min(1, (ts - t0) / dur);
-      var e = k < .5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
+      var e = 1 - Math.pow(1 - k, 4);  // easeOutQuart
       flow.scrollLeft = from + d * e;
       if(k < 1){ anim = requestAnimationFrame(tick); } else { anim = null; paint(); }
     }
@@ -635,7 +637,7 @@
   stage.addEventListener('wheel', function(e){
     e.preventDefault();
     var now = Date.now();
-    if(now - wheelLock < 400) return;
+    if(now - wheelLock < 260) return;
     var d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
     if(Math.abs(d) < 8) return;
     wheelLock = now;
