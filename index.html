@@ -148,8 +148,16 @@
   #flow p.first{text-indent:0}
   /* 飾りの行・見出し行は原文のまま。字下げだけ外して独立させる */
   #flow p.plain{text-indent:0}
+  /* 原文に空行があったところだけ、ひと息分のアキを置く（2026-11-22）。
+     本文の地の文は書籍組（字下げのみ・アキなし）のまま。メールやメルマガは
+     空行で塊を分けて書くので、そこを潰すとMailより読みにくくなる、という本人の指摘。
+     こちらが推測で切った段落（ハードラップのたたみ戻し）にはアキを置かない。 */
+  #flow p.gap{margin-top:.75em}
+  /* 箇条書き・記号で始まる行、原文がすでに字下げしている行は、こちらの字下げを足さない */
+  #flow p.bul{text-indent:0}
   #flow.latin{text-align:left;hyphens:auto}
   #flow.latin p{text-indent:0;margin:0 0 1em}
+  #flow.latin p.gap{margin-top:0}
   #flow h3{
     font-size:1.03em;font-weight:600;margin:1.5em 0 .65em;text-indent:0;
     letter-spacing:.03em;break-after:avoid;
@@ -219,7 +227,7 @@
       <span class="hint" id="hint" data-t="hint">← → かスペースでめくる</span>
       <span class="sp"></span>
       <!-- 版の目印。直したのに直っていないときは、まずここが新しいかを見る -->
-      <span class="hint" id="ver">2026-11-15e</span>
+      <span class="hint" id="ver">2026-11-22a</span>
     </div>
   </div>
 </section>
@@ -478,6 +486,8 @@
   });
 
   /* ---------- 本文の組み直し ---------- */
+  var BULLET = /^[ 　\t]*([・\-*>＞●○◆■□▼▽※★☆]|\.{3}|…|[0-9０-９]+[.．、)）])/;
+
   function build(raw){
     var jp = (raw.match(/[぀-ヿ一-鿿]/g) || []).length;
     state.latin = jp / Math.max(1, raw.replace(/\s/g,'').length) < 0.08;
@@ -495,11 +505,21 @@
         .filter(function(l){ return l.trim() !== ''; });
       if(!lines.length) return;
 
-      var cur = '', prev = null;
+      var cur = '', prev = null, head = true;
+      // head = この塊（原文で空行に挟まれたかたまり）の最初の段落かどうか。
+      // ここだけアキを置く。塊の中でこちらが推測して切った段落にはアキを置かない。
+      function cls(extra){
+        var c = [];
+        if(first) c.push('first');
+        else if(head) c.push('gap');
+        if(extra) c.push(extra);
+        first = false; head = false;
+        return c.length ? ' class="' + c.join(' ') + '"' : '';
+      }
       function flush(){
         if(cur.trim()){
-          out.push('<p' + (first ? ' class="first"' : '') + '>' + link(esc(cur)) + '</p>');
-          first = false;
+          // 原文がすでに空白で字下げしている行に、こちらの1字下げを足すと2字下がる（Mailは1字）。
+          out.push('<p' + cls(BULLET.test(cur) || /^[ 　\t]/.test(cur) ? 'bul' : '') + '>' + link(esc(cur)) + '</p>');
         }
         cur = ''; prev = null;
       }
@@ -509,14 +529,13 @@
         //    こちらがやるのは「どこで段落を切るか」だけ。罫線に置き換えたり ■ を外したりしない。
         if(isRule(line) || isHeading(line, lines.length === 1)){
           flush();
-          out.push('<p class="plain">' + link(esc(line.trim())) + '</p>');
-          first = false;
+          out.push('<p' + cls('plain') + '>' + link(esc(line.trim())) + '</p>');
           return;
         }
         if(!cur){ cur = line; prev = line; return; }
         if(!state.unwrap){ flush(); cur = line; prev = line; return; }
 
-        var bullet  = /^([・\-*>＞●○◆■□▼▽※★☆]|\.{3}|…|[0-9０-９]+[.．、)）])/.test(line);
+        var bullet  = BULLET.test(line);
         // URLで終わる行の次は必ず切る。つなぐとURLが次の行を飲み込んでリンクが壊れる。
         var prevUrl = /https?:\/\/\S+$/.test(prev);
         // 「…」は会話や引用で文頭にもよく出るので題名扱いにしない（段落が割れる）
